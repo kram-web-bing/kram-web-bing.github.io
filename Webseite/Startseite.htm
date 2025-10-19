@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Passwortgeschützt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; padding: 18px; max-width: 600px; }
+    input { padding: 6px; font-size: 16px; }
+    button { padding: 6px 10px; font-size: 16px; margin-left: 6px; }
+    #ausgabe { color: red; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+  <h2>Bitte Passwort eingeben:</h2>
+  <input type="password" id="pw" autocomplete="off" />
+  <button id="weiter">Weiter</button>
+  <p id="ausgabe"></p>
+
+  <script>
+    // Hilfsfunktion: ArrayBuffer -> Hex-String
+    function bufferToHex(buffer) {
+      const bytes = new Uint8Array(buffer);
+      return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    // SHA-256 Hash einer Zeichenkette berechnen (utf-8), liefert hex-String
+    async function sha256Hex(str) {
+      const enc = new TextEncoder();
+      const data = enc.encode(str);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      return bufferToHex(hashBuffer);
+    }
+
+    // --- Obfuskierte Passwort-Definition (ASCII-Codes) ---
+    // Passwort: "vgrfdwwvhtruiwvruhnmdfsumvnz"
+    const pwAscii = [
+      118,103,114,102,100,119,119,118,104,116,114,117,105,119,
+      118,114,117,104,110,109,100,102,115,117,109,118,110,122
+    ];
+
+    // Funktion: ASCII-Array -> String
+    function asciiArrayToString(arr) {
+      return String.fromCharCode(...arr);
+    }
+
+    // storedHashHex wird beim Laden berechnet (Hash des internen Passworts)
+    let storedHashHex = null;
+    (async function initStoredHash() {
+      const hiddenPw = asciiArrayToString(pwAscii); // intern: "vgrfdwwvhtruiwvruhnmdfsumvnz"
+      storedHashHex = await sha256Hex(hiddenPw);
+      // storedHashHex ist jetzt gesetzt; wir zeigen ihn nicht an
+    })();
+
+    // Klick-Handler: Eingabe hashen & vergleichen
+    document.getElementById("weiter").addEventListener("click", async function() {
+      document.getElementById("ausgabe").textContent = ""; // clear
+      const eingabe = document.getElementById("pw").value;
+      if (!eingabe) {
+        document.getElementById("ausgabe").textContent = "Bitte Passwort eingeben.";
+        return;
+      }
+      try {
+        const eingabeHash = await sha256Hex(eingabe);
+
+        // Sicherstellen, dass storedHashHex bereits berechnet wurde
+        const waitForStored = () => new Promise(resolve => {
+          if (storedHashHex !== null) resolve();
+          else {
+            const iv = setInterval(() => {
+              if (storedHashHex !== null) { clearInterval(iv); resolve(); }
+            }, 10);
+          }
+        });
+        await waitForStored();
+
+        if (eingabeHash === storedHashHex) {
+          // richtiges Passwort
+          window.location.href = "hauptseite.htm";
+        } else {
+          document.getElementById("ausgabe").textContent = "Falsches Passwort. Versuch es erneut.";
+        }
+      } catch (err) {
+        console.error("Fehler beim Prüfen:", err);
+        document.getElementById("ausgabe").textContent = "Fehler beim Prüfen. Schau in die Konsole.";
+      }
+    });
+
+    // Enter-Taste löst Button aus
+    document.getElementById("pw").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") document.getElementById("weiter").click();
+    });
+  </script>
+
+</body>
+</html>
